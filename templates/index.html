@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Uttam Limbani · Fake News Detector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="aurora"></div>
+
+  <header>
+    <div class="brand">
+      <span class="logo">UL</span>
+      <div>
+        <h1>Uttam <span>Limbani</span></h1>
+        <p class="tag">Fake News Detector · TF-IDF + Logistic Regression</p>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="detect">Detect</button>
+      <button class="tab" data-tab="history">History</button>
+      <button class="tab" data-tab="about">About</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- DETECT -->
+    <section id="detect" class="panel active">
+      <div class="card input-card">
+        <div class="card-head">
+          <h2>Analyze an article</h2>
+          <span id="counter" class="counter">0 words</span>
+        </div>
+        <textarea id="news" placeholder="Paste the full news article here (title + body). The model reads full articles — a single headline will not give a reliable result."></textarea>
+        <div class="row">
+          <div class="examples">
+            <span>Try:</span>
+            <button class="chip" data-ex="real">Real sample</button>
+            <button class="chip" data-ex="fake">Fake sample</button>
+            <button class="chip" data-ex="clear">Clear</button>
+          </div>
+          <button id="analyze" class="primary">Analyze</button>
+        </div>
+      </div>
+
+      <div id="result" class="card result-card hidden"></div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="history" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <h2>Recent checks</h2>
+          <button id="clear-history" class="ghost">Clear all</button>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section id="about" class="panel">
+      <div class="card prose">
+        <h2>How it works</h2>
+        <p>Your text is cleaned, turned into <b>TF-IDF</b> features (word importance scores), and scored by a <b>Logistic Regression</b> model trained on ~20,800 labelled news articles from the Kaggle "Fake News" dataset. The model reports a probability, which we show as a confidence score, and we surface the words that pushed the verdict each way.</p>
+        <h2>Staying current</h2>
+        <p>A model only knows what it was trained on, so this one is <b>updatable</b>: it folds in recent (2026) labelled news, and you can teach it by pressing <b>Real</b> / <b>Fake</b> under any result. Re-running <span>update_model.py</span> retrains it on the base data plus everything new.</p>
+        <h2>Honest limitations</h2>
+        <ul>
+          <li><b>It judges style, not truth.</b> It learned the writing patterns of one 2017-era dataset — it cannot fact-check a claim. A well-written lie can read as "Real".</li>
+          <li><b>Full articles only.</b> Short headlines lack signal; you'll see a warning below ~25 words.</li>
+          <li><b>English only</b>, and biased toward the topics/period of its training data.</li>
+        </ul>
+        <p class="fineprint">Built by <span>Uttam Limbani</span>. Based on the open-source project github.com/abiek12/Fake-News-Detection-using-MachineLearning, with the model retrained on current libraries to remove the version-mismatch bug and the headline bias.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

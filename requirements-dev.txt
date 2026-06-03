@@ -1,0 +1,4 @@
+# Extra packages needed only for TRAINING / UPDATING the model
+# (the running app does not need these). Install with:
+#   .\venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+pandas

@@ -1,0 +1,23 @@
+# virtual environment
+venv/
+.venv/
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+
+# the base Kaggle dataset is large (~100 MB) - download it yourself, don't commit it
+dataset/
+*.csv
+!recent_2026.csv
+
+# user feedback collected at runtime
+feedback.csv
+
+# editor / OS junk
+.vscode/
+.idea/
+.DS_Store
+.ipynb_checkpoints/
+*.log
