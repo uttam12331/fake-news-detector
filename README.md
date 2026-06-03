@@ -6,6 +6,8 @@ Built by **Uttam Limbani**.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue) ![Flask](https://img.shields.io/badge/flask-web%20app-black) ![Model](https://img.shields.io/badge/model-TF--IDF%20%2B%20Logistic%20Regression-green)
 
+![Screenshot of the app analysing a fake article](docs/screenshot.png)
+
 ---
 
 ## Why I built this

@@ -105,7 +105,9 @@ function renderResult(d) {
   box.querySelectorAll(".fb").forEach((b) =>
     b.addEventListener("click", () => sendFeedback(b.dataset.label))
   );
-  box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  if (!new URLSearchParams(location.search).get("demo")) {
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 }
 
 async function sendFeedback(label) {
@@ -156,3 +158,11 @@ $("#clear-history").addEventListener("click", () => {
 });
 
 updateCount();
+
+// Shareable demo links: /?demo=fake or /?demo=real auto-fill an example and analyze it.
+const demo = new URLSearchParams(location.search).get("demo");
+if (demo === "fake" || demo === "real") {
+  ta.value = EXAMPLES[demo];
+  updateCount();
+  analyze();
+}
