@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-annotator"
+version = "0.1.0"
+description = "Local-LLM video annotation and Q&A: describe, summarize, or ask questions about a video."
+requires-python = ">=3.10"
+dependencies = [
+    "opencv-python-headless>=4.9",
+    "faster-whisper>=1.0",
+    "ollama>=0.3",
+]
+
+[project.scripts]
+video-annotator = "video_annotator.cli:main"
+
+[tool.setuptools]
+packages = ["video_annotator"]
