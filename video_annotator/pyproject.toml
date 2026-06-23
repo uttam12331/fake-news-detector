@@ -15,6 +15,8 @@ dependencies = [
 
 [project.scripts]
 video-annotator = "video_annotator.cli:main"
+audio-annotator = "video_annotator.audio_cli:main"
+image-annotator = "video_annotator.image_cli:main"
 
 [tool.setuptools]
 packages = ["video_annotator"]

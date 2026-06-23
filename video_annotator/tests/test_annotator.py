@@ -2,26 +2,10 @@ import json
 
 import pytest
 
+from conftest import FakeBackend
 from video_annotator.annotator import VideoAnnotator
 from video_annotator.config import AnnotatorConfig
 from video_annotator.types import AnswerFormat, AnswerType, FrameCaption, VideoContext
-
-
-class FakeBackend:
-    """Stands in for OllamaBackend so tests don't need a running Ollama server."""
-
-    def __init__(self, response: str = "a person is talking on camera"):
-        self.response = response
-        self.captioned: list[bytes] = []
-        self.last_prompt: str | None = None
-
-    def caption_frame(self, model, image_jpeg, prompt):
-        self.captioned.append(image_jpeg)
-        return "a frame caption"
-
-    def generate(self, model, prompt):
-        self.last_prompt = prompt
-        return self.response
 
 
 def make_context():
@@ -142,5 +126,5 @@ def test_build_context_uses_backend_for_each_sampled_frame(tmp_path, monkeypatch
     ctx = annotator.build_context("clip.mp4")
 
     assert len(ctx.frame_captions) == 3
-    assert len(backend.captioned) == 3
+    assert len(backend.images_seen) == 3
     assert ctx.transcript == ""

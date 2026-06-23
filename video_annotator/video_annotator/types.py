@@ -48,11 +48,55 @@ class VideoContext:
 
 
 @dataclass
-class VideoAnswer:
+class BaseAnswer:
     answer: str
     answer_type: AnswerType
     answer_format: AnswerFormat
     question: str | None
     instructions: str | None
-    frames_analyzed: int
-    had_transcript: bool
+
+
+@dataclass
+class VideoAnswer(BaseAnswer):
+    frames_analyzed: int = 0
+    had_transcript: bool = False
+
+
+@dataclass
+class TranscriptSegment:
+    start_s: float
+    end_s: float
+    text: str
+
+
+@dataclass
+class AudioContext:
+    """Everything extracted from an audio file before any question is asked."""
+
+    audio_path: str
+    duration_s: float
+    segments: list[TranscriptSegment] = field(default_factory=list)
+
+    @property
+    def transcript(self) -> str:
+        return " ".join(seg.text.strip() for seg in self.segments).strip()
+
+    def render(self) -> str:
+        lines = [f"Audio duration: {self.duration_s:.1f}s"]
+        if self.segments:
+            lines.append("\n--- Transcript (timestamped) ---")
+            for seg in self.segments:
+                lines.append(f"[{seg.start_s:6.1f}s-{seg.end_s:6.1f}s] {seg.text.strip()}")
+        else:
+            lines.append("\n(no speech detected)")
+        return "\n".join(lines)
+
+
+@dataclass
+class AudioAnswer(BaseAnswer):
+    segments_analyzed: int = 0
+
+
+@dataclass
+class ImageAnswer(BaseAnswer):
+    pass

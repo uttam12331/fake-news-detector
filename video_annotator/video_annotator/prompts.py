@@ -8,6 +8,22 @@ FRAME_CAPTION_PROMPT = (
     "Do not speculate about anything outside the frame."
 )
 
+_SUBJECT_INTROS = {
+    "video": (
+        "You are analyzing a video given the extracted context below (audio transcript "
+        "and timestamped visual descriptions of sampled frames). Only use this context -- "
+        "do not invent details that aren't supported by it."
+    ),
+    "audio": (
+        "You are analyzing an audio recording given the timestamped transcript below. "
+        "Only use this transcript -- do not invent details that aren't supported by it."
+    ),
+    "image": (
+        "You are analyzing the attached image directly. Only describe what is actually "
+        "visible -- do not invent details that aren't supported by it."
+    ),
+}
+
 _FORMAT_INSTRUCTIONS = {
     AnswerFormat.TEXT: "Answer in plain prose, no markdown.",
     AnswerFormat.MARKDOWN: "Answer using markdown (headings/emphasis where useful).",
@@ -19,38 +35,33 @@ _FORMAT_INSTRUCTIONS = {
 }
 
 _TYPE_INSTRUCTIONS = {
-    AnswerType.DESCRIPTION: "Give a general description of what happens in the video.",
-    AnswerType.SUMMARY: "Give a concise summary of the video's content, no more than a few sentences.",
-    AnswerType.QA: "Answer the user's question using only evidence from the video context below.",
-    AnswerType.TIMELINE: "Break the video down chronologically: timestamp -> what happens.",
+    AnswerType.DESCRIPTION: "Give a general description of what this shows/contains.",
+    AnswerType.SUMMARY: "Give a concise summary of the content, no more than a few sentences.",
+    AnswerType.QA: "Answer the user's question using only evidence from the content above.",
+    AnswerType.TIMELINE: "Break the content down chronologically: timestamp -> what happens.",
     AnswerType.FACT_CHECK: (
-        "Treat the user's question as a claim to verify against the video. State a verdict "
-        "(SUPPORTED / CONTRADICTED / NOT ENOUGH EVIDENCE) and the evidence from the video context "
-        "that justifies it."
+        "Treat the user's question as a claim to verify against the content. State a verdict "
+        "(SUPPORTED / CONTRADICTED / NOT ENOUGH EVIDENCE) and the evidence above that justifies it."
     ),
 }
 
 
 def build_answer_prompt(
     *,
-    context_text: str,
+    subject: str,
     answer_type: AnswerType,
     answer_format: AnswerFormat,
     question: str | None,
     instructions: str | None,
+    context_text: str | None = None,
 ) -> str:
-    parts = [
-        "You are analyzing a video given the extracted context below (audio transcript "
-        "and timestamped visual descriptions of sampled frames). Only use this context -- "
-        "do not invent details that aren't supported by it.",
-        "",
-        "--- VIDEO CONTEXT ---",
-        context_text,
-        "--- END VIDEO CONTEXT ---",
-        "",
-        _TYPE_INSTRUCTIONS[answer_type],
-        _FORMAT_INSTRUCTIONS[answer_format],
-    ]
+    """Build the final answer prompt for video/audio (with extracted context_text)
+    or image (no context_text -- the model sees the image directly in the same call)."""
+    parts = [_SUBJECT_INTROS[subject]]
+    if context_text:
+        label = subject.upper()
+        parts += ["", f"--- {label} CONTEXT ---", context_text, f"--- END {label} CONTEXT ---"]
+    parts += ["", _TYPE_INSTRUCTIONS[answer_type], _FORMAT_INSTRUCTIONS[answer_format]]
     if question:
         parts.append(f"\nQuestion: {question}")
     if instructions:

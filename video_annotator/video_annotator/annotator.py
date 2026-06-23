@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
-
 from video_annotator import prompts, transcribe, video_io
 from video_annotator.config import AnnotatorConfig
+from video_annotator.formatting import coerce_format
 from video_annotator.types import AnswerFormat, AnswerType, FrameCaption, VideoAnswer, VideoContext
 from video_annotator.vision_backend import OllamaBackend
 
@@ -30,7 +29,7 @@ class VideoAnnotator:
         captions = [
             FrameCaption(
                 timestamp_s=frame.timestamp_s,
-                caption=self.backend.caption_frame(
+                caption=self.backend.generate_with_image(
                     self.config.vision_model,
                     video_io.encode_frame_jpeg(frame.image),
                     prompts.FRAME_CAPTION_PROMPT,
@@ -74,6 +73,7 @@ class VideoAnnotator:
         ctx = context or self.build_context(video_path)
 
         prompt = prompts.build_answer_prompt(
+            subject="video",
             context_text=ctx.render(),
             answer_type=answer_type,
             answer_format=answer_format,
@@ -81,7 +81,7 @@ class VideoAnnotator:
             instructions=instructions,
         )
         raw_answer = self.backend.generate(self.config.text_model, prompt)
-        answer = _coerce_format(raw_answer, answer_format)
+        answer = coerce_format(raw_answer, answer_format)
 
         return VideoAnswer(
             answer=answer,
@@ -92,17 +92,3 @@ class VideoAnnotator:
             frames_analyzed=len(ctx.frame_captions),
             had_transcript=bool(ctx.transcript.strip()),
         )
-
-
-def _coerce_format(raw_answer: str, answer_format: AnswerFormat) -> str:
-    if answer_format != AnswerFormat.JSON:
-        return raw_answer
-    text = raw_answer.strip()
-    if text.startswith("```"):
-        text = text.strip("`").removeprefix("json").strip()
-    try:
-        json.loads(text)
-        return text
-    except json.JSONDecodeError:
-        # Model didn't return clean JSON -- wrap it so callers can still rely on the format.
-        return json.dumps({"answer": raw_answer})

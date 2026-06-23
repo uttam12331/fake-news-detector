@@ -13,11 +13,13 @@ class OllamaBackend:
         self._timeout_s = timeout_s
         self._client = None
 
-    def caption_frame(self, model: str, image_jpeg: bytes, prompt: str) -> str:
+    def generate_with_image(self, model: str, image_bytes: bytes, prompt: str) -> str:
+        """One vision-model call: a single image + a prompt -> text. Used both for
+        per-frame captioning (video) and direct image Q&A/description (image)."""
         client = self._get_client()
         response = client.chat(
             model=model,
-            messages=[{"role": "user", "content": prompt, "images": [image_jpeg]}],
+            messages=[{"role": "user", "content": prompt, "images": [image_bytes]}],
         )
         return response["message"]["content"].strip()
 

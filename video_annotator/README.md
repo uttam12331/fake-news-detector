@@ -1,12 +1,13 @@
-# Video Annotator
+# Video / Audio / Image Annotator
 
-A local-LLM video annotation / Q&A model. Point it at a video and it can:
+Three separate local-LLM annotation/Q&A models — one each for **video**, **audio**, and
+**images**. Point any of them at a file and they can:
 
 - give a general **description** of what's in it
 - **summarize** it
 - answer a **specific question** about its content
-- break it down as a **timeline** (timestamp -> what happens)
-- run a **fact-check** style verdict against a claim, using the video as evidence
+- break it down as a **timeline** (timestamp -> what happens) — video/audio only
+- run a **fact-check** style verdict against a claim, using the content as evidence
 
 You control:
 - **what kind of answer** (`description` / `summary` / `qa` / `timeline` / `fact_check`)
@@ -16,26 +17,62 @@ You control:
 If you don't give a question or instructions, it says so and falls back to a general
 description instead of guessing what you wanted.
 
-Everything runs **locally** — frame captioning and audio transcription happen on your
-machine, and the LLM calls go to a local [Ollama](https://ollama.com) server. No cloud
-API keys, no data leaves the box. This is a separate module inside this repo and doesn't
-touch the fake-news-detector app (`app.py`, `model/`, etc.).
+Everything runs **locally** — frame/image captioning and audio transcription happen on
+your machine, and the LLM calls go to a local [Ollama](https://ollama.com) server. No
+cloud API keys, no data leaves the box. This is a separate module inside this repo and
+doesn't touch the fake-news-detector app (`app.py`, `model/`, etc.).
 
-## How it works
+## The three models
 
+They're independent — each has its own class, CLI, and answer type — because the
+pipeline for each medium is genuinely different:
+
+| | `VideoAnnotator` | `AudioAnnotator` | `ImageAnnotator` |
+|---|---|---|---|
+| Input | video file | audio file | image file |
+| Extraction | sampled frames + audio transcript | timestamped transcript | none (sent as-is) |
+| Vision-model calls | one per sampled frame (captioning) | none | one (direct Q&A on the image) |
+| Text-model call | one (synthesize answer from frames+transcript) | one (synthesize answer from transcript) | — (vision model answers directly) |
+| Extra result field | `frames_analyzed`, `had_transcript` | `segments_analyzed` | — |
+
+They share the same config (`AnnotatorConfig`), prompt-building rules, and JSON-format
+enforcement (`prompts.py`, `formatting.py`) so the behavior of "no question given" or
+"format=json" is consistent across all three.
+
+## How each one works
+
+**Video** (`annotator.py`):
 1. **Sample frames** from the video at a configurable interval (`video_io.py`, OpenCV).
-2. **Caption each frame** with a local vision-language model via Ollama
-   (`vision_backend.py`).
+2. **Caption each frame** with a local vision-language model via Ollama (`vision_backend.py`).
 3. **Transcribe the audio** locally with `faster-whisper` (`transcribe.py`) — empty
    string if the clip has no speech/audio, which is a normal outcome, not an error.
-4. **Combine** frame captions + transcript into one text context (`types.py`).
+4. **Combine** frame captions + transcript into one text context.
 5. **Answer**: build a prompt from the context + your question/instructions/type/format
-   and run it through the local LLM (`prompts.py`, `annotator.py`).
+   and run it through the local LLM.
 
 ```
 video.mp4 -> [sample frames] -> [caption each frame]  \
                                                          -> [context] -> [LLM answer]
           -> [transcribe audio] --------------------- /
+```
+
+**Audio** (`audio_annotator.py`):
+1. **Transcribe** locally with `faster-whisper`, keeping per-segment timestamps.
+2. **Answer**: build a prompt from the timestamped transcript + your
+   question/instructions/type/format and run it through the local LLM.
+
+```
+clip.wav -> [transcribe with timestamps] -> [context] -> [LLM answer]
+```
+
+**Image** (`image_annotator.py`):
+1. **Load** the image file (`image_io.py`, validated, no re-encoding).
+2. **Answer**: one call straight to the local vision-language model with the image
+   attached and your question/instructions/type/format in the prompt — no separate
+   captioning pass, since the model can just look at the image while answering.
+
+```
+photo.jpg -> [load + validate] -> [LLM answer, image attached]
 ```
 
 ## Setup
@@ -57,36 +94,47 @@ pip install -r requirements.txt
 
 ### CLI
 
+Each medium has its own command:
+
 ```bash
-# General description (no question given)
+# Video -- general description (no question given)
 python -m video_annotator.cli video.mp4
 
-# Ask something specific
+# Video -- ask something specific
 python -m video_annotator.cli video.mp4 -q "What is the person wearing?"
 
-# Timeline, as markdown
+# Video -- timeline, as markdown
 python -m video_annotator.cli video.mp4 -t timeline -f markdown
 
-# Fact-check a claim against the video, as JSON
+# Video -- fact-check a claim against the video, as JSON
 python -m video_annotator.cli video.mp4 \
   -t fact_check -f json \
   -q "The video shows the building was already on fire before the truck arrived."
 
-# Steer a description without a single question
+# Audio -- ask something specific
+python -m video_annotator.audio_cli call.wav -q "What did the caller ask for?"
+
+# Audio -- timeline of who said what, when
+python -m video_annotator.audio_cli call.wav -t timeline
+
+# Image -- general description (no question given)
+python -m video_annotator.image_cli photo.jpg
+
+# Image -- ask something specific
+python -m video_annotator.image_cli photo.jpg -q "What text is visible on the sign?"
+
+# Steer a description without a single question (works for all three)
 python -m video_annotator.cli video.mp4 -i "focus on any safety violations you see"
 ```
 
 ### Python API
 
 ```python
-from video_annotator import VideoAnnotator, AnswerType, AnswerFormat
+from video_annotator import VideoAnnotator, AudioAnnotator, ImageAnnotator, AnswerType, AnswerFormat
 
-annotator = VideoAnnotator()  # uses default AnnotatorConfig
-
-# Build the (expensive) context once, reuse it for multiple questions on the same video
-context = annotator.build_context("video.mp4")
-
-result = annotator.ask(
+video = VideoAnnotator()  # uses default AnnotatorConfig
+context = video.build_context("video.mp4")  # build the (expensive) context once...
+result = video.ask(  # ...and reuse it for multiple questions on the same video
     "video.mp4",
     question="Does anyone mention a date in the video?",
     answer_type=AnswerType.QA,
@@ -95,11 +143,16 @@ result = annotator.ask(
 )
 print(result.answer)
 
-summary = annotator.ask("video.mp4", answer_type=AnswerType.SUMMARY, context=context)
-print(summary.answer)
+audio = AudioAnnotator()
+print(audio.ask("call.wav", question="What did the caller ask for?").answer)
+
+image = ImageAnnotator()
+print(image.ask("photo.jpg", instructions="focus on any text visible").answer)
 ```
 
 ### Configuration
+
+All three annotators take the same config:
 
 ```python
 from video_annotator import VideoAnnotator, AnnotatorConfig
@@ -111,7 +164,7 @@ config = AnnotatorConfig(
     frame_interval_s=1.0,
     max_frames=64,
 )
-annotator = VideoAnnotator(config)
+annotator = VideoAnnotator(config)  # or AudioAnnotator(config) / ImageAnnotator(config)
 ```
 
 ## Choosing a model (production notes)
@@ -138,5 +191,6 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-Tests mock the Ollama backend (no server/model required) and exercise real frame
-extraction against synthetically generated video files (no fixture files needed).
+Tests mock the Ollama backend and the faster-whisper model (no server/model required)
+and exercise real frame/image extraction against synthetically generated video/image
+files (no fixture files needed).
