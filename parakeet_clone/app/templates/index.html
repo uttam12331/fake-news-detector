@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Copilot Live — real-time AI answer assistant</title>
+<meta name="theme-color" content="#0b0f1a">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">◑</span>
+    <span class="brand-name">Copilot&nbsp;Live</span>
+    <span class="persona-badge" id="persona-badge">Interview Copilot</span>
+  </div>
+  <div class="topbar-right">
+    <div class="status"><span class="status-dot" id="status-dot"></span><span id="status-text">Ready</span></div>
+    <button class="ghost-btn" id="open-settings">⚙ Settings</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-mode="live">🎧 Live Copilot</button>
+  <button class="tab" data-mode="record">● Record &amp; Ask</button>
+  <button class="tab" data-mode="video">🎬 Describe Video</button>
+</nav>
+
+<main class="layout">
+  <!-- Left column: the active input mode -->
+  <section class="left-col">
+
+    <div class="mode" data-mode="live">
+      <h2>Live Copilot</h2>
+      <p class="sub">Start listening, and answers stream in as questions are asked. Stop to auto-answer the full transcript.</p>
+      <div class="transcript" id="live-transcript"><span class="muted">Transcript will appear here…</span></div>
+      <div class="row">
+        <button class="primary" id="live-toggle">🎙 Start listening</button>
+        <button class="ghost-btn" id="live-ask-now">⚡ Answer now</button>
+        <button class="ghost-btn" id="live-clear">Clear</button>
+      </div>
+    </div>
+
+    <div class="mode" data-mode="record" hidden>
+      <h2>Record &amp; Ask</h2>
+      <p class="sub">Tap record, speak the question, tap again to stop — it transcribes and sends automatically.</p>
+      <div class="record-wrap">
+        <button class="record-btn" id="record-btn">●</button>
+      </div>
+      <div class="record-status" id="record-status"><span class="muted">Idle.</span></div>
+    </div>
+
+    <div class="mode" data-mode="video" hidden>
+      <h2>Describe Video</h2>
+      <p class="sub">Share a video and it gets described. Add instructions for what/how to describe, or it'll ask.</p>
+      <input type="file" id="video-file" accept="video/*">
+      <video id="video-preview" controls hidden></video>
+      <label class="field">What should it focus on? (optional)
+        <textarea id="video-instruction" rows="2" placeholder="e.g. Summarise what happens, in bullet points. Or: is there any text on screen?"></textarea>
+      </label>
+      <label class="field inline">Frames to sample
+        <input type="number" id="video-frames" min="2" max="16" value="6">
+      </label>
+      <button class="primary" id="video-go">Describe video</button>
+    </div>
+
+    <!-- Shared context tray -->
+    <div class="context-tray">
+      <div class="ctx-head">
+        <strong>Context</strong> <span class="muted">(<span id="ctx-count">0</span> screenshots)</span>
+        <button class="ghost-btn small" id="add-screenshot">📸 Add screenshot</button>
+      </div>
+      <div class="thumbs" id="context-thumbs"></div>
+      <p class="hint">Screenshots give the model on-screen context (a coding problem, a slide, a question). Add several for long context — all are sent together.</p>
+    </div>
+  </section>
+
+  <!-- Right column: streamed answers -->
+  <section class="right-col">
+    <div class="answer-head"><h2>Answers</h2></div>
+    <div class="answer-feed" id="answer-feed"></div>
+  </section>
+</main>
+
+<!-- Context prompt modal -->
+<div class="modal" id="ctx-modal" hidden>
+  <div class="modal-box small">
+    <h3>Add context?</h3>
+    <p>No context is attached. Want to capture a screenshot of what's on screen first?</p>
+    <div class="modal-actions">
+      <button class="primary" id="ctx-add">📸 Add screenshot</button>
+      <button class="ghost-btn" id="ctx-skip">Send without</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal" id="settings-modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head"><h3>Settings</h3><button class="x" id="settings-close">×</button></div>
+
+    <label class="field">Provider
+      <select id="set-provider">
+        <option value="anthropic">Claude (Anthropic)</option>
+        <option value="openai">OpenAI (GPT)</option>
+      </select>
+    </label>
+
+    <label class="field">Model <select id="set-model"></select></label>
+
+    <label class="field">API key <input type="password" id="set-key" placeholder="sk-..." autocomplete="off"></label>
+    <p class="hint">Stored only in this browser (localStorage) and sent straight to the provider. Never uploaded to any server of ours.</p>
+
+    <label class="field">Persona
+      <select id="set-persona">
+        <option value="interview">Interview Copilot</option>
+        <option value="meeting">Meeting Assistant</option>
+        <option value="sales">Sales Call Copilot</option>
+        <option value="general">General Q&amp;A</option>
+      </select>
+    </label>
+
+    <label class="field">System prompt <textarea id="set-system" rows="4"></textarea></label>
+    <label class="field">Background notes / résumé (sent as context) <textarea id="set-notes" rows="3" placeholder="Paste your résumé, product facts, or anything the answers should know."></textarea></label>
+    <label class="field inline">Max answer length (tokens) <input type="number" id="set-maxtokens" min="128" max="8192" value="1024"></label>
+
+    <div class="modal-actions">
+      <button class="primary" id="settings-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
