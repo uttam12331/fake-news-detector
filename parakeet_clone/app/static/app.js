@@ -1,6 +1,18 @@
 import { PROVIDERS, streamChat } from "./providers.js";
 import { LiveTranscriber, isSupported as sttSupported } from "./transcribe.js";
 import { captureScreenshot, extractVideoFrames, AudioRecorder } from "./capture.js";
+import { stripCodeBlocks, extractCodeBlocks, pairCodeAndTests, verifyCodeInAnswer } from "./coderunner.js";
+import * as History from "./history.js";
+
+// Appended to every system prompt so the model knows the code+test contract:
+// code is never shown to the user until it's been run, so it must hand us
+// something runnable to test against.
+const CODE_TEST_INSTRUCTION =
+  "\n\nWhen your answer includes a code solution written in JavaScript, follow it with a " +
+  "second fenced block labeled ```test containing JavaScript assertions that exercise the code " +
+  'using assert(condition, message) — at least 2 cases, e.g. assert(add(2, 3) === 5, "2+3 should be 5"). ' +
+  "The test block must call the exact function/variable names defined in the code block. " +
+  "For any other programming language, just give the code without a test block.";
 
 // ---------------------------------------------------------------------------
 // Settings (persisted in the browser only)
@@ -49,6 +61,7 @@ const state = {
   transcriber: null,
   recorder: null,
   busy: false,
+  meetingId: History.getOrCreateCurrentMeeting().id,
 };
 
 // ---------------------------------------------------------------------------
@@ -180,7 +193,58 @@ function copyAnswer(node) {
   );
 }
 
-async function ask({ userText, images, label }) {
+function buildSystemPrompt() {
+  let sys = state.systemPrompt + CODE_TEST_INSTRUCTION;
+  if (state.notes.trim()) sys += `\n\nBackground notes from the user:\n${state.notes.trim()}`;
+  return sys;
+}
+
+// Renders prose + (if present) a distinct, badged code section. Used for both
+// the live answer feed and the meeting-history view — `meta` either carries a
+// fresh verification result (live) or the smaller persisted summary (history).
+function renderAnswerBlock(container, rawText, meta) {
+  container.dataset.raw = rawText;
+  if (!meta || !meta.hasCode) {
+    container.innerHTML = renderMarkdown(rawText);
+    return;
+  }
+
+  const blocks = extractCodeBlocks(rawText);
+  const { code, test } = pairCodeAndTests(blocks);
+  const prose = stripCodeBlocks(rawText);
+  const pass = meta.pass ?? meta.verified;
+  const badge = !meta.verifiable
+    ? { cls: "info", text: "Not verified" }
+    : pass
+    ? { cls: "pass", text: "✓ Tests passed" }
+    : { cls: "fail", text: "✗ Tests failed" };
+
+  let body = `<pre class="code">${escapeHtml(code ? code.code : "")}</pre>`;
+  if (meta.verifiable && test) {
+    body += `<details class="test-details"><summary>Test cases</summary><pre class="code">${escapeHtml(test.code)}</pre></details>`;
+  }
+  const note = meta.reason || meta.resultSummary;
+  if (note) body += `<p class="code-sub-label muted">${escapeHtml(note)}</p>`;
+  if (meta.result) {
+    if (meta.result.error) body += `<p class="code-error">${escapeHtml(meta.result.error)}</p>`;
+    if (meta.result.logs && meta.result.logs.length) body += `<pre class="code logs">${escapeHtml(meta.result.logs.join("\n"))}</pre>`;
+  }
+
+  const lang = (code && code.lang) || "code";
+  container.innerHTML =
+    renderMarkdown(prose) +
+    `<div class="code-section"><div class="code-head"><span class="code-lang">${escapeHtml(lang)}</span>` +
+    `<span class="code-badge ${badge.cls}">${badge.text}</span></div>${body}</div>`;
+}
+
+function summarizeVerification(v) {
+  if (!v.hasCode) return null;
+  if (!v.verifiable) return v.reason;
+  if (v.pass) return `Tests passed (${v.result.passed}/${v.result.total}).`;
+  return `Tests failed (${v.result.passed}/${v.result.total}).`;
+}
+
+async function ask({ userText, images, label, mode = "qa", onlyImages = false }) {
   if (state.busy) {
     toast("Still answering the previous question…", true);
     return;
@@ -193,8 +257,8 @@ async function ask({ userText, images, label }) {
   state.busy = true;
   setStatus(label || "Thinking…", true);
 
-  const allImages = [...state.contextImages, ...(images || [])];
-  const sys = state.systemPrompt + (state.notes.trim() ? `\n\nBackground notes from the user:\n${state.notes.trim()}` : "");
+  const allImages = onlyImages ? images || [] : [...state.contextImages, ...(images || [])];
+  const sys = buildSystemPrompt();
   const answerBody = newAnswerCard(userText);
   let raw = "";
 
@@ -211,13 +275,72 @@ async function ask({ userText, images, label }) {
       },
       (chunk) => {
         raw += chunk;
+        // Hide everything from the first code fence onward while streaming —
+        // code is never shown until it's been run and tested.
+        const fenceIdx = raw.indexOf("```");
+        const hasFence = fenceIdx !== -1;
         answerBody.dataset.raw = raw;
-        answerBody.innerHTML = renderMarkdown(raw) + '<span class="cursor">▋</span>';
+        const prose = hasFence ? raw.slice(0, fenceIdx) : raw;
+        let html = renderMarkdown(prose) + '<span class="cursor">▋</span>';
+        if (hasFence) {
+          html += `<div class="code-pending muted">⏳ Writing code — it'll be tested before it's shown…</div>`;
+        }
+        answerBody.innerHTML = html;
         $("#answer-feed").scrollTop = 0;
       }
     );
-    answerBody.dataset.raw = raw;
-    answerBody.innerHTML = renderMarkdown(raw);
+
+    let verification = await verifyCodeInAnswer(raw);
+
+    // Code that fails its own tests gets exactly one fix attempt before we
+    // give up and show the (marked failing) result anyway.
+    if (verification.verifiable && !verification.pass) {
+      setStatus("Tests failed — asking the model to fix it…", true);
+      const r = verification.result;
+      const failDetail = r.error
+        ? `Error: ${r.error}`
+        : `${r.passed}/${r.total} tests passed.${r.logs.length ? " Logs: " + r.logs.join("; ") : ""}`;
+      let fixed = "";
+      try {
+        await streamChat(
+          {
+            provider: state.provider,
+            apiKey: state.apiKey,
+            model: state.model || PROVIDERS[state.provider].models[0].id,
+            system: sys,
+            userText:
+              `Your previous code failed its tests. ${failDetail}\n\n` +
+              "Fix the code and reply with the corrected code block followed by an updated test block.",
+            history: [
+              { role: "user", text: userText },
+              { role: "assistant", text: raw },
+            ],
+            images: [],
+            maxTokens: state.maxTokens,
+          },
+          (chunk) => (fixed += chunk)
+        );
+      } catch (_) {
+        // Keep the original (failing) answer if the fix attempt itself errors.
+      }
+      if (fixed.trim()) {
+        raw = fixed;
+        verification = await verifyCodeInAnswer(raw);
+      }
+    }
+
+    renderAnswerBlock(answerBody, raw, verification);
+
+    History.addEntry(state.meetingId, {
+      mode,
+      question: userText || "(context only)",
+      answerRaw: raw,
+      screenshotCount: allImages.length,
+      hasCode: !!verification.hasCode,
+      verifiable: !!verification.verifiable,
+      verified: verification.verifiable ? !!verification.pass : null,
+      resultSummary: summarizeVerification(verification),
+    });
   } catch (e) {
     answerBody.innerHTML = `<p class="err">${escapeHtml(e.message || "Request failed.")}</p>`;
   } finally {
@@ -267,14 +390,14 @@ function setupLiveMode() {
       btn.textContent = "🎙 Start listening";
       btn.classList.remove("recording");
       setStatus("Ready", false);
-      if (text) ask({ userText: text, label: "Answering…" });
+      if (text) ask({ userText: text, label: "Answering…", mode: "live" });
     }
   };
 
   $("#live-ask-now").onclick = () => {
     const text = (state.transcriber && state.transcriber.finalText.trim()) || transcriptEl.textContent.trim();
     if (!text) return toast("Nothing transcribed yet.", true);
-    ask({ userText: text, label: "Answering…" });
+    ask({ userText: text, label: "Answering…", mode: "live" });
   };
 
   $("#live-clear").onclick = () => {
@@ -321,7 +444,7 @@ function setupRecordMode() {
       if (!text) return toast("Didn't catch any speech.", true);
       // "When it stops it auto-sends" — but first make sure there's context.
       await ensureContext();
-      ask({ userText: text, label: "Answering recording…" });
+      ask({ userText: text, label: "Answering recording…", mode: "record" });
     }
   };
 }
@@ -362,12 +485,125 @@ function setupVideoMode() {
       const frames = await extractVideoFrames(file, n);
       const userText =
         `${prompt}\n\n(The following ${frames.length} images are evenly-spaced frames sampled from a single video, in chronological order.)`;
-      await ask({ userText, images: frames, label: "Describing video…" });
+      await ask({ userText, images: frames, label: "Describing video…", mode: "video" });
     } catch (e) {
       toast(e.message || "Could not process video.", true);
       setStatus("Ready", false);
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// Answer from Screen — one fresh screenshot, answered on its own (no
+// accumulated context tray screenshots mixed in).
+// ---------------------------------------------------------------------------
+function setupScreenAnswer() {
+  $("#answer-screen-btn").onclick = async () => {
+    setStatus("Capturing screen…", true);
+    try {
+      const shot = await captureScreenshot();
+      await ask({
+        userText: "Look only at this screenshot. Answer the question, solve the problem, or describe what's shown — whatever is most useful.",
+        images: [shot],
+        onlyImages: true,
+        mode: "screen",
+        label: "Answering from screen…",
+      });
+    } catch (e) {
+      setStatus("Ready", false);
+      if (e && e.name === "NotAllowedError") return; // user cancelled the picker
+      toast(e.message || "Could not capture screen.", true);
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Meeting history
+// ---------------------------------------------------------------------------
+function refreshMeetingTitle() {
+  const m = History.getMeeting(state.meetingId);
+  $("#meeting-title").textContent = m ? m.title : "";
+}
+
+function setupMeetingControls() {
+  $("#new-meeting").onclick = () => {
+    const m = History.startNewMeeting();
+    state.meetingId = m.id;
+    refreshMeetingTitle();
+    $("#answer-feed").innerHTML = "";
+    toast("Started a new meeting.");
+  };
+
+  $("#meeting-title").ondblclick = () => {
+    const m = History.getMeeting(state.meetingId);
+    const newTitle = prompt("Rename meeting", m ? m.title : "");
+    if (newTitle) {
+      History.renameMeeting(state.meetingId, newTitle);
+      refreshMeetingTitle();
+    }
+  };
+}
+
+function renderHistoryView() {
+  const list = $("#history-list");
+  list.innerHTML = "";
+  const meetings = History.listMeetings();
+  if (meetings.length === 0) {
+    list.append(el("p", { class: "muted" }, "No meetings yet — ask something to start one."));
+    return;
+  }
+
+  meetings.forEach((m) => {
+    const body = el("div", { class: "meeting-body" });
+    m.entries
+      .slice()
+      .reverse()
+      .forEach((entry) => {
+        const answerEl = el("div", { class: "answer-body" });
+        renderAnswerBlock(answerEl, entry.answerRaw, {
+          hasCode: entry.hasCode,
+          verifiable: entry.verifiable,
+          verified: entry.verified,
+          resultSummary: entry.resultSummary,
+        });
+        body.append(
+          el(
+            "div",
+            { class: "history-entry" },
+            el(
+              "div",
+              { class: "qa-question" },
+              entry.question + (entry.screenshotCount ? ` · 📸 ${entry.screenshotCount}` : "")
+            ),
+            el("div", { class: "qa-answer" }, answerEl)
+          )
+        );
+      });
+
+    const card = el("div", { class: "meeting-card" });
+    const head = el(
+      "div",
+      { class: "meeting-head", onclick: () => card.classList.toggle("open") },
+      el("strong", {}, m.title),
+      el("span", { class: "muted" }, ` · ${m.entries.length} exchange${m.entries.length === 1 ? "" : "s"}`),
+      el(
+        "button",
+        {
+          class: "ghost-btn small danger",
+          onclick: (e) => {
+            e.stopPropagation();
+            if (confirm("Delete this meeting? This can't be undone.")) {
+              History.deleteMeeting(m.id);
+              renderHistoryView();
+            }
+          },
+        },
+        "Delete"
+      )
+    );
+    card.append(head, body);
+    list.append(card);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -440,8 +676,12 @@ function setupSettings() {
 function setupTabs() {
   $$(".tab").forEach((tab) => {
     tab.onclick = () => {
+      const isHistory = tab.dataset.mode === "history";
       $$(".tab").forEach((t) => t.classList.toggle("active", t === tab));
       $$(".mode").forEach((m) => (m.hidden = m.dataset.mode !== tab.dataset.mode));
+      $(".layout").hidden = isHistory;
+      $("#history-view").hidden = !isHistory;
+      if (isHistory) renderHistoryView();
     };
   });
 }
@@ -452,7 +692,10 @@ function boot() {
   setupLiveMode();
   setupRecordMode();
   setupVideoMode();
+  setupScreenAnswer();
+  setupMeetingControls();
   renderContextTray();
+  refreshMeetingTitle();
 
   $("#add-screenshot").onclick = addScreenshot;
   $("#persona-badge").textContent = PERSONAS[state.personaKey]?.label || "Custom";
