@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdf-toolkit"
+version = "0.1.0"
+description = "iLovePDF-style PDF editor: merge, split, rotate, protect, watermark, convert, and compress-to-target-size."
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "pypdf>=4.0",
+    "cryptography>=42.0",
+    "pikepdf>=9.0",
+    "Pillow>=10.0",
+    "img2pdf>=0.5",
+    "pypdfium2>=4.30",
+    "reportlab>=4.0",
+]
+
+[tool.setuptools]
+packages = ["pdf_toolkit"]

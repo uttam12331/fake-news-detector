@@ -1,0 +1,8 @@
+flask>=3.0
+pypdf>=4.0
+cryptography>=42.0
+pikepdf>=9.0
+Pillow>=10.0
+img2pdf>=0.5
+pypdfium2>=4.30
+reportlab>=4.0
