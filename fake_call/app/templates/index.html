@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fake Call — schedule a fake incoming call</title>
+<meta name="theme-color" content="#0b0f1a">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<main class="wrap">
+
+  <!-- Setup screen -->
+  <section id="setup-screen" class="card">
+    <div class="brand"><span class="logo">☎</span> Fake Call</div>
+    <p class="sub">Type any name, pick a delay, and your phone will "ring" with an incoming call from them.</p>
+
+    <label class="field">Caller name
+      <input type="text" id="caller-name" placeholder="e.g. Mom, Boss, Unknown" maxlength="40" autocomplete="off">
+    </label>
+
+    <label class="field">Label <span class="muted">(shown under the name, optional)</span>
+      <input type="text" id="caller-subtitle" placeholder="Mobile" maxlength="30" autocomplete="off">
+    </label>
+
+    <label class="field">Ring me in
+      <select id="call-delay">
+        <option value="0">Right now</option>
+        <option value="5" selected>5 seconds</option>
+        <option value="10">10 seconds</option>
+        <option value="30">30 seconds</option>
+        <option value="60">1 minute</option>
+        <option value="custom">Custom…</option>
+      </select>
+    </label>
+
+    <label class="field" id="custom-delay-wrap" hidden>Seconds
+      <input type="number" id="custom-delay" min="0" max="3600" value="90">
+    </label>
+
+    <button class="primary" id="start-call-btn">📞 Start fake call</button>
+
+    <div class="cancel-row" id="cancel-row" hidden>
+      Ringing in <span id="cancel-countdown">5</span>s…
+      <button class="ghost-btn" id="cancel-scheduled">Cancel</button>
+    </div>
+
+    <p class="hint">Nothing here is sent anywhere — it's all simulated in this browser tab. Ringtone and vibration are generated on the fly.</p>
+  </section>
+
+  <!-- Incoming call screen -->
+  <section id="incoming-call" class="phone-screen" hidden>
+    <div class="call-info">
+      <div class="avatar" id="call-avatar">?</div>
+      <div class="call-name" id="call-name">Unknown</div>
+      <div class="call-meta">Incoming call · <span id="call-subtitle-incoming">Mobile</span></div>
+    </div>
+    <div class="call-actions">
+      <button class="call-btn decline" id="decline-call" aria-label="Decline">✕</button>
+      <button class="call-btn accept" id="accept-call" aria-label="Accept">✓</button>
+    </div>
+  </section>
+
+  <!-- In-call screen -->
+  <section id="in-call" class="phone-screen" hidden>
+    <div class="call-info">
+      <div class="avatar" id="in-call-avatar">?</div>
+      <div class="call-name" id="in-call-name">Unknown</div>
+      <div class="call-meta" id="in-call-timer">0:00</div>
+    </div>
+    <div class="incall-grid">
+      <button class="incall-toggle">🔇<span>Mute</span></button>
+      <button class="incall-toggle">⌨<span>Keypad</span></button>
+      <button class="incall-toggle">🔊<span>Speaker</span></button>
+    </div>
+    <button class="call-btn end" id="end-call" aria-label="End call">📞</button>
+  </section>
+
+</main>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

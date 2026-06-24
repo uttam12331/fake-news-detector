@@ -1,0 +1,156 @@
+:root {
+  --bg: #0b0f1a;
+  --panel: #131a2b;
+  --panel-2: #1b2336;
+  --border: #28324a;
+  --text: #e7ecf5;
+  --muted: #8a96b0;
+  --accent: #5b8cff;
+  --accent-2: #7c5cff;
+  --good: #34d399;
+  --bad: #f87171;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: radial-gradient(1200px 600px at 70% -10%, #18203a 0%, var(--bg) 55%);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+}
+
+.wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 28px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 22px; margin-bottom: 6px; }
+.logo { font-size: 26px; color: var(--accent); }
+.sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+.field input, .field select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 11px 12px;
+  font-size: 15px;
+  font-family: inherit;
+}
+.muted { color: var(--muted); font-weight: 400; }
+
+.primary {
+  width: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(91, 140, 255, 0.3);
+}
+.primary:disabled { opacity: 0.6; cursor: default; }
+.primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+.ghost-btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ghost-btn:hover { border-color: var(--accent); }
+
+.cancel-row {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.hint { font-size: 12px; color: var(--muted); margin: 18px 0 0; line-height: 1.5; }
+
+/* --- Full-screen call UI: incoming + in-call --- */
+.phone-screen {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(160deg, #1c2541 0%, #0b0f1a 70%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 60px 24px 50px;
+  z-index: 1000;
+}
+
+.call-info { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 10vh; }
+.avatar {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 44px; font-weight: 700; color: #fff;
+  box-shadow: 0 10px 40px rgba(91, 140, 255, 0.35);
+}
+.call-name { font-size: 28px; font-weight: 700; margin-top: 8px; }
+.call-meta { color: var(--muted); font-size: 15px; }
+
+.call-actions { display: flex; gap: 70px; }
+.call-btn {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  border: none;
+  font-size: 28px;
+  color: #fff;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.call-btn.decline { background: var(--bad); animation: pulse-bad 1.4s infinite; }
+.call-btn.accept { background: var(--good); animation: pulse-good 1.4s infinite; }
+@keyframes pulse-bad { 0%,100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.45); } 50% { box-shadow: 0 0 0 14px rgba(248,113,113,0); } }
+@keyframes pulse-good { 0%,100% { box-shadow: 0 0 0 0 rgba(52,211,153,0.45); } 50% { box-shadow: 0 0 0 14px rgba(52,211,153,0); } }
+
+.incall-grid { display: flex; gap: 26px; }
+.incall-toggle {
+  width: 78px; height: 78px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 22px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer;
+}
+.incall-toggle span { font-size: 11px; color: var(--muted); }
+.incall-toggle.active { background: var(--accent); }
+.incall-toggle.active span { color: #fff; }
+
+.call-btn.end {
+  width: 70px; height: 70px;
+  background: var(--bad);
+  transform: rotate(135deg);
+  font-size: 26px;
+}
+
+@media (max-width: 420px) {
+  .call-actions { gap: 50px; }
+}
