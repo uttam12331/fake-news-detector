@@ -1,0 +1,40 @@
+apply plugin: "com.android.application"
+
+android {
+    namespace "com.fakecall.app"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.fakecall.app"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        debug {}
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+// The JS/CSS in ../app/static is the single source of truth for the UI —
+// copy it into assets/ at build time instead of keeping a driftable second
+// copy. Only index.html is native-specific (relative paths, no PWA bits).
+tasks.register("copyWebAssets", Copy) {
+    from("${projectDir}/../../app/static") {
+        include "*.js", "*.css"
+    }
+    from("${projectDir}/web") {
+        include "index.html"
+    }
+    into "${projectDir}/src/main/assets"
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("copyWebAssets")
+}

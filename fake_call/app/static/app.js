@@ -1,4 +1,8 @@
 import { formatClock, parseDelaySeconds, initialsFor, sanitizeCallerName } from "./callsim.js";
+import { DEFAULT_LINES, pickNextLineIndex, randomPauseMs } from "./fakevoice.js";
+import { performLookup } from "./lookupClient.js";
+
+const LOOKUP_KEY_STORAGE = "fakecall_lookup_api_key";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -10,6 +14,9 @@ const state = {
   callSeconds: 0,
   audioCtx: null,
   wakeLock: null,
+  voiceActive: false,
+  voiceTimer: null,
+  lastLineIndex: -1,
 };
 
 function escapeHtml(s) {
@@ -18,6 +25,16 @@ function escapeHtml(s) {
 
 function showScreen(id) {
   ["setup-screen", "incoming-call", "in-call"].forEach((s) => ($("#" + s).hidden = s !== id));
+}
+
+// Mock status-bar clock on the call screens — just cosmetic realism, reads
+// the device's real time so it always looks plausible at a glance.
+function updateStatusClocks() {
+  const now = new Date();
+  const h = now.getHours() % 12 || 12;
+  const m = String(now.getMinutes()).padStart(2, "0");
+  const text = `${h}:${m}`;
+  document.querySelectorAll(".status-clock").forEach((el) => (el.textContent = text));
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +107,41 @@ function releaseWakeLock() {
 }
 
 // ---------------------------------------------------------------------------
+// Fake voice — speaks the "other side" of the call with the Web Speech
+// Synthesis API so accepting feels like an actual two-way conversation.
+// ---------------------------------------------------------------------------
+function speakNextLine() {
+  if (!state.voiceActive || !window.speechSynthesis) return;
+  const idx = pickNextLineIndex(DEFAULT_LINES, state.lastLineIndex);
+  state.lastLineIndex = idx;
+  const utter = new SpeechSynthesisUtterance(DEFAULT_LINES[idx]);
+  utter.rate = 1;
+  utter.pitch = 1;
+  utter.onend = () => {
+    if (!state.voiceActive) return;
+    state.voiceTimer = setTimeout(speakNextLine, randomPauseMs(1200, 4000));
+  };
+  // If speech synthesis fails to fire onend (some mobile WebViews), still
+  // recover instead of going silent for the rest of the call.
+  utter.onerror = utter.onend;
+  window.speechSynthesis.speak(utter);
+}
+
+function startFakeVoice() {
+  if (!window.speechSynthesis) return;
+  state.voiceActive = true;
+  state.lastLineIndex = -1;
+  state.voiceTimer = setTimeout(speakNextLine, 700);
+}
+
+function stopFakeVoice() {
+  state.voiceActive = false;
+  clearTimeout(state.voiceTimer);
+  state.voiceTimer = null;
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+// ---------------------------------------------------------------------------
 // Call flow
 // ---------------------------------------------------------------------------
 function triggerIncomingCall(name, subtitle) {
@@ -113,11 +165,13 @@ function acceptCall() {
     state.callSeconds++;
     $("#in-call-timer").textContent = formatClock(state.callSeconds);
   }, 1000);
+  if ($("#fake-voice-toggle").checked) startFakeVoice();
 }
 
 function endCall() {
   clearInterval(state.callTimer);
   state.callTimer = null;
+  stopFakeVoice();
   releaseWakeLock();
   resetToSetup();
 }
@@ -188,12 +242,92 @@ function setupCosmeticButtons() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Setup screen tabs (fake call vs. number lookup)
+// ---------------------------------------------------------------------------
+function setupTabs() {
+  const buttons = document.querySelectorAll(".tab-btn");
+  buttons.forEach((btn) => {
+    btn.onclick = () => {
+      buttons.forEach((b) => b.classList.toggle("active", b === btn));
+      $("#call-tab").hidden = btn.dataset.tab !== "call";
+      $("#lookup-tab").hidden = btn.dataset.tab !== "lookup";
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Number lookup — carrier/line-type/location only, never a caller's name
+// (see the disclosure text in the lookup tab for why).
+// ---------------------------------------------------------------------------
+function renderLookupResult(result) {
+  const box = $("#lookup-result");
+  box.hidden = false;
+
+  if (result.error) {
+    box.classList.add("error");
+    box.innerHTML = `<div class="row"><span class="v">${escapeHtml(result.error)}</span></div>`;
+    return;
+  }
+
+  box.classList.remove("error");
+  const rows = [
+    ["Valid", result.valid ? "Yes" : "No"],
+    ["Number", result.number],
+    ["Country", result.countryName],
+    ["Location", result.location],
+    ["Carrier", result.carrier],
+    ["Line type", result.lineType],
+  ].filter(([, v]) => v);
+
+  box.innerHTML = rows
+    .map(([k, v]) => `<div class="row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(String(v))}</span></div>`)
+    .join("");
+}
+
+function setupLookupTab() {
+  const keyInput = $("#lookup-api-key");
+  keyInput.value = localStorage.getItem(LOOKUP_KEY_STORAGE) || "";
+  keyInput.onchange = () => localStorage.setItem(LOOKUP_KEY_STORAGE, keyInput.value.trim());
+
+  $("#lookup-btn").onclick = async () => {
+    const number = $("#lookup-number").value.trim();
+    const apiKey = keyInput.value.trim();
+    const btn = $("#lookup-btn");
+
+    if (!number) {
+      renderLookupResult({ error: "Enter a phone number first." });
+      return;
+    }
+    if (!apiKey) {
+      renderLookupResult({ error: "Paste an API key in Settings below first." });
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+    try {
+      const result = await performLookup(number, apiKey);
+      renderLookupResult(result);
+    } catch (_) {
+      renderLookupResult({ error: "Could not reach the lookup provider." });
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "🔎 Check number";
+    }
+  };
+}
+
 function boot() {
   setupForm();
   setupCosmeticButtons();
+  setupTabs();
+  setupLookupTab();
   $("#accept-call").onclick = acceptCall;
   $("#decline-call").onclick = declineCall;
   $("#end-call").onclick = endCall;
+  updateStatusClocks();
+  setInterval(updateStatusClocks, 15000);
 }
 
 boot();

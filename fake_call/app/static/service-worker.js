@@ -1,9 +1,11 @@
-const CACHE_NAME = "fake-call-v1";
+const CACHE_NAME = "fake-call-v2";
 const SHELL_ASSETS = [
   "/",
   "/static/style.css",
   "/static/app.js",
   "/static/callsim.js",
+  "/static/fakevoice.js",
+  "/static/lookupClient.js",
   "/static/manifest.json",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
