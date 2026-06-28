@@ -5,7 +5,7 @@ on:
     branches:
       - "**"
     paths:
-      - "fake_call/**"
+      - "projects/fake_call/**"
       - ".github/workflows/build-fake-call-apk.yml"
   workflow_dispatch: {}
 
@@ -23,15 +23,15 @@ jobs:
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-        working-directory: fake_call/android
+        working-directory: projects/fake_call/android
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon
-        working-directory: fake_call/android
+        working-directory: projects/fake_call/android
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: fake-call-debug-apk
-          path: fake_call/android/app/build/outputs/apk/debug/app-debug.apk
+          path: projects/fake_call/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

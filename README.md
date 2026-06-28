@@ -140,6 +140,16 @@ So treat it as a rough signal and a demo of how text classification works, not a
 
 ---
 
+## Other projects in this repo
+
+Beyond the fake-news detector, this repo also holds a few standalone apps and
+tools under [`projects/`](projects/) — a fake-call simulator (with an Android
+APK build), an AI meeting/interview copilot, a PDF toolkit, and a local
+video/audio/image annotator. See [`projects/README.md`](projects/README.md)
+for what each one is and how to run it.
+
+---
+
 ## Credit
 
 The original idea and the base dataset come from
